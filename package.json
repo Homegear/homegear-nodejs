@@ -1,0 +1,12 @@
+{
+  "name": "@homegear/homegear-nodejs",
+  "version": "1.0.0",
+  "description": "Node.js binding for Homegear",
+  "main": "index.js",
+  "author": "Dr. Sathya Laufer (s.laufer@homegear.email)",
+  "license": "LGPLv3",
+  "bugs": {
+    "url": "https://github.com/Homegear/homegear-nodejs/issues"
+  },
+  "homepage": "https://github.com/Homegear/homegear-nodejs"
+}
