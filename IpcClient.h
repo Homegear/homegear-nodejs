@@ -49,13 +49,13 @@ class IpcClient : public Ipc::IIpcClient {
   void RemoveOnDisconnect() { on_disconnect_ = std::function<void(void)>(); }
   void SetBroadcastEvent(std::function<void(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value)> value) { _broadcastEvent.swap(value); }
   void RemoveBroadcastEvent() { _broadcastEvent = std::function<void(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value)>(); }
-  void SetNodeInput(std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message)> value) { _nodeInput.swap(value); }
-  void RemoveNodeInput() { _nodeInput = std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable message)>(); }
+  void SetNodeInput(std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message, bool synchronous)> value) { _nodeInput.swap(value); }
+  void RemoveNodeInput() { _nodeInput = std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable message, bool synchronous)>(); }
  private:
   std::function<void(void)> on_connect_;
   std::function<void(void)> on_disconnect_;
   std::function<void(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value)> _broadcastEvent;
-  std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message)> _nodeInput;
+  std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message, bool synchronous)> _nodeInput;
 
   void onConnect() override;
   void onDisconnect() override;

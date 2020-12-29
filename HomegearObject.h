@@ -28,14 +28,17 @@ class Homegear {
     Ipc::PVariable node_info;
     uint32_t input_index;
     Ipc::PVariable message;
+    bool synchronous = false;
   };
 
   explicit Homegear(const std::string &socket_path);
   ~Homegear();
 
   static napi_value New(napi_env env, napi_callback_info info);
-  static napi_value Invoke(napi_env env, napi_callback_info info);
   static inline napi_value Constructor(napi_env env);
+
+  static napi_value Connected(napi_env env, napi_callback_info info);
+  static napi_value Invoke(napi_env env, napi_callback_info info);
 
   static void OnConnectJs(napi_env env, napi_value callback, void *context, void *data);
   void OnConnect();
@@ -44,7 +47,7 @@ class Homegear {
   static void OnEventJs(napi_env env, napi_value callback, void *context, void *data);
   void OnEvent(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value);
   static void OnNodeInputJs(napi_env env, napi_value callback, void *context, void *data);
-  void OnNodeInput(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message);
+  void OnNodeInput(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message, bool synchronous);
 
   std::unique_ptr<IpcClient> ipc_client_;
   napi_threadsafe_function on_connect_threadsafe_function_ = nullptr;

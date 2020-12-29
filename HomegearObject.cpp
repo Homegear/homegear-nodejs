@@ -11,7 +11,7 @@ Homegear::Homegear(const std::string &socket_path) : env_(nullptr), wrapper_(nul
   ipc_client_->SetOnConnect(std::bind(&Homegear::OnConnect, this));
   ipc_client_->SetOnDisconnect(std::bind(&Homegear::OnDisconnect, this));
   ipc_client_->SetBroadcastEvent(std::bind(&Homegear::OnEvent, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
-  ipc_client_->SetNodeInput(std::bind(&Homegear::OnNodeInput, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
+  ipc_client_->SetNodeInput(std::bind(&Homegear::OnNodeInput, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
   ipc_client_->start();
 }
 
@@ -32,11 +32,12 @@ void Homegear::Destructor(napi_env env, void *nativeObject, void * /*finalize_hi
 napi_value Homegear::Init(napi_env env, napi_value exports) {
   napi_status status;
   napi_property_descriptor properties[] = {
+      DECLARE_NAPI_METHOD("connected", Connected),
       DECLARE_NAPI_METHOD("invoke", Invoke)
   };
 
   napi_value cons;
-  status = napi_define_class(env, "Homegear", NAPI_AUTO_LENGTH, New, nullptr, 1, properties, &cons);
+  status = napi_define_class(env, "Homegear", NAPI_AUTO_LENGTH, New, nullptr, 2, properties, &cons);
   assert(status == napi_ok);
 
   // We will need the constructor `cons` later during the life cycle of the
@@ -212,8 +213,6 @@ void Homegear::OnConnectJs(napi_env env, napi_value callback, void *context, voi
     auto status = napi_get_undefined(env, &undefined);
     assert(status == napi_ok);
 
-    // Call the JavaScript function and pass it the prime that the secondary
-    // thread found.
     status = napi_call_function(env, undefined, callback, 0, nullptr, nullptr);
     assert(status == napi_ok);
   }
@@ -241,8 +240,6 @@ void Homegear::OnDisconnectJs(napi_env env, napi_value callback, void *context, 
     auto status = napi_get_undefined(env, &undefined);
     assert(status == napi_ok);
 
-    // Call the JavaScript function and pass it the prime that the secondary
-    // thread found.
     status = napi_call_function(env, undefined, callback, 0, nullptr, nullptr);
     assert(status == napi_ok);
   }
@@ -285,8 +282,6 @@ void Homegear::OnEventJs(napi_env env, napi_value callback, void *context, void 
     args[4] = NapiVariableConverter::getNapiVariable(env, event_struct->value);
     assert(status == napi_ok);
 
-    // Call the JavaScript function and pass it the prime that the secondary
-    // thread found.
     status = napi_call_function(env, undefined, callback, argc, args, nullptr);
     assert(status == napi_ok);
   }
@@ -322,7 +317,7 @@ void Homegear::OnNodeInputJs(napi_env env, napi_value callback, void *context, v
     auto status = napi_get_undefined(env, &undefined);
     assert(status == napi_ok);
 
-    size_t argc = 4;
+    size_t argc = 5;
     napi_value args[argc];
 
     auto *node_input_struct = (OnNodeInputStruct *)data;
@@ -334,17 +329,17 @@ void Homegear::OnNodeInputJs(napi_env env, napi_value callback, void *context, v
     assert(status == napi_ok);
     args[3] = NapiVariableConverter::getNapiVariable(env, node_input_struct->message);
     assert(status == napi_ok);
+    status = napi_get_boolean(env, node_input_struct->synchronous, &args[4]);
+    assert(status == napi_ok);
 
-    // Call the JavaScript function and pass it the prime that the secondary
-    // thread found.
-    status = napi_call_function(env, undefined, callback, 0, nullptr, nullptr);
+    status = napi_call_function(env, undefined, callback, argc, args, nullptr);
     assert(status == napi_ok);
   }
 
   delete (OnNodeInputStruct *)data;
 }
 
-void Homegear::OnNodeInput(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message) {
+void Homegear::OnNodeInput(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message, bool synchronous) {
   if (!on_node_input_threadsafe_function_) return;
   auto status = napi_acquire_threadsafe_function(on_node_input_threadsafe_function_);
   assert(status == napi_ok);
@@ -353,6 +348,7 @@ void Homegear::OnNodeInput(const std::string &node_id, const Ipc::PVariable &nod
   data->node_info = node_info;
   data->input_index = input_index;
   data->message = message;
+  data->synchronous = synchronous;
   status = napi_call_threadsafe_function(on_node_input_threadsafe_function_, data, napi_tsfn_nonblocking);
   assert(status == napi_ok);
   status = napi_release_threadsafe_function(on_node_input_threadsafe_function_, napi_tsfn_release);
@@ -387,6 +383,23 @@ napi_value Homegear::Invoke(napi_env env, napi_callback_info info) {
   }
 
   return NapiVariableConverter::getNapiVariable(env, rpc_result);
+}
+
+napi_value Homegear::Connected(napi_env env, napi_callback_info info) {
+  size_t argc = 0;
+  napi_value jsthis;
+  auto status = napi_get_cb_info(env, info, &argc, nullptr, &jsthis, nullptr);
+  assert(status == napi_ok);
+
+  Homegear *obj;
+  status = napi_unwrap(env, jsthis, reinterpret_cast<void **>(&obj));
+  assert(status == napi_ok);
+
+  napi_value result;
+  status = napi_get_boolean(env, obj->ipc_client_->connected(), &result);
+  assert(status == napi_ok);
+
+  return result;
 }
 
 
