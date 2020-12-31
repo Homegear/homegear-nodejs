@@ -63,6 +63,7 @@ Ipc::PVariable IpcClient::broadcastEvent(Ipc::PArray &parameters) {
 Ipc::PVariable IpcClient::NodeInput(Ipc::PArray &parameters) {
   if (parameters->size() != 5) return Ipc::Variable::createError(-1, "Wrong parameter count.");
 
+  parameters->at(3)->structValue->emplace("inputIndex", parameters->at(2));
   if (_nodeInput) _nodeInput(parameters->at(0)->stringValue, parameters->at(1), parameters->at(2)->integerValue64, parameters->at(3), parameters->at(4)->booleanValue);
 
   return std::make_shared<Ipc::Variable>();
