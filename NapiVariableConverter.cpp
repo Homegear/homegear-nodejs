@@ -95,6 +95,10 @@ Ipc::PVariable NapiVariableConverter::getVariable(napi_env env, napi_value value
         status = napi_get_element(env, properties, i, &property_name);
         assert(status == napi_ok);
         napi_value element_value;
+        bool has_own_property = false;
+        status = napi_has_own_property(env, value, property_name, &has_own_property);
+        assert(status == napi_ok);
+        if (!has_own_property) continue;
         status = napi_get_property(env, value, property_name, &element_value);
         assert(status == napi_ok);
         ipc_struct->structValue->emplace(getVariable(env, property_name)->stringValue, getVariable(env, element_value));
