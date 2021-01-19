@@ -132,7 +132,7 @@ napi_value NapiVariableConverter::getNapiVariable(napi_env env, const Ipc::PVari
     auto status = napi_create_int64(env, value->integerValue64, &result);
     assert(status == napi_ok);
   } else if (value->type == Ipc::VariableType::tFloat) {
-    auto status = napi_create_int64(env, value->floatValue, &result);
+    auto status = napi_create_double(env, value->floatValue, &result);
     assert(status == napi_ok);
   } else if (value->type == Ipc::VariableType::tString || value->type == Ipc::VariableType::tBase64) {
     auto status = napi_create_string_utf8(env, value->stringValue.c_str(), NAPI_AUTO_LENGTH, &result);

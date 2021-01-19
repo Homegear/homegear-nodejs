@@ -1,6 +1,6 @@
 {
   "name": "@homegear/homegear-nodejs",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Node.js binding for Homegear",
   "main": "build/Release/homegear.node",
   "author": "Dr. Sathya Laufer (s.laufer@homegear.email)",
