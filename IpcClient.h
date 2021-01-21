@@ -40,22 +40,45 @@
 
 class IpcClient : public Ipc::IIpcClient {
  public:
+  struct InvokeResultInfo {
+    std::atomic_bool finished{false};
+    Ipc::PVariable result;
+  };
+  typedef std::shared_ptr<InvokeResultInfo> PInvokeResultInfo;
+
   explicit IpcClient(const std::string &socketPath);
   ~IpcClient() override;
+
+  void InvokeResult(pthread_t thread_id, const Ipc::PVariable &result);
 
   void SetOnConnect(std::function<void(void)> value) { on_connect_.swap(value); }
   void SetOnDisconnect(std::function<void(void)> value) { on_disconnect_.swap(value); }
   void RemoveOnConnect() { on_connect_ = std::function<void(void)>(); }
   void RemoveOnDisconnect() { on_disconnect_ = std::function<void(void)>(); }
-  void SetBroadcastEvent(std::function<void(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value)> value) { _broadcastEvent.swap(value); }
-  void RemoveBroadcastEvent() { _broadcastEvent = std::function<void(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value)>(); }
-  void SetNodeInput(std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message, bool synchronous)> value) { _nodeInput.swap(value); }
-  void RemoveNodeInput() { _nodeInput = std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable message, bool synchronous)>(); }
+  void SetBroadcastEvent(std::function<void(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value)> value) { broadcast_event_.swap(value); }
+  void RemoveBroadcastEvent() { broadcast_event_ = std::function<void(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value)>(); }
+  void SetNodeInput(std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message, bool synchronous)> value) { node_input_.swap(value); }
+  void RemoveNodeInput() { node_input_ = std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable message, bool synchronous)>(); }
+  void SetInvokeNodeMethod(std::function<bool(pthread_t thread_id, const std::string &node_id, const std::string &method_name, const Ipc::PVariable &parameters)> value) { invoke_node_method_.swap(value); }
+  void RemoveInvokeNodeMethod() { invoke_node_method_ = std::function<bool(pthread_t thread_id, const std::string &node_id, const std::string &method_name, const Ipc::PVariable &parameters)>(); }
  private:
+  struct LocalRequestInfo {
+    std::mutex wait_mutex;
+    std::condition_variable condition_variable;
+  };
+  typedef std::shared_ptr<LocalRequestInfo> PLocalRequestInfo;
+
   std::function<void(void)> on_connect_;
   std::function<void(void)> on_disconnect_;
-  std::function<void(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value)> _broadcastEvent;
-  std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message, bool synchronous)> _nodeInput;
+  std::function<void(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value)> broadcast_event_;
+  std::function<void(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message, bool synchronous)> node_input_;
+  std::function<bool(pthread_t thread_id, const std::string &node_id, const std::string &method_name, const Ipc::PVariable &parameters)> invoke_node_method_;
+
+  std::mutex local_request_info_mutex_;
+  std::unordered_map<pthread_t, PLocalRequestInfo> local_request_Info_;
+  std::mutex invoke_results_mutex_;
+  // We only have one method call per time per thread so we don't need a packet ID.
+  std::unordered_map<pthread_t, PInvokeResultInfo> invoke_results_;
 
   void onConnect() override;
   void onDisconnect() override;
@@ -65,6 +88,7 @@ class IpcClient : public Ipc::IIpcClient {
   // }}}
 
   // {{{ RPC methods when used in a Node-BLUE node
+  Ipc::PVariable InvokeNodeMethod(Ipc::PArray &parameters);
   Ipc::PVariable NodeInput(Ipc::PArray &parameters);
   // }}}
 };

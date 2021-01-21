@@ -31,6 +31,13 @@ class Homegear {
     bool synchronous = false;
   };
 
+  struct OnInvokeNodeMethodStruct {
+    pthread_t thread_id;
+    std::string node_id;
+    std::string method_name;
+    Ipc::PVariable parameters;
+  };
+
   explicit Homegear(const std::string &socket_path);
   ~Homegear();
 
@@ -48,12 +55,15 @@ class Homegear {
   void OnEvent(std::string &event_source, uint64_t peer_id, int32_t channel, const std::string &variable_name, const Ipc::PVariable &value);
   static void OnNodeInputJs(napi_env env, napi_value callback, void *context, void *data);
   void OnNodeInput(const std::string &node_id, const Ipc::PVariable &node_info, uint32_t input_index, const Ipc::PVariable &message, bool synchronous);
+  static void OnInvokeNodeMethodJs(napi_env env, napi_value callback, void *context, void *data);
+  bool OnInvokeNodeMethod(pthread_t thread_id, const std::string &node_id, const std::string &method_name, const Ipc::PVariable &parameters);
 
   std::unique_ptr<IpcClient> ipc_client_;
   napi_threadsafe_function on_connect_threadsafe_function_ = nullptr;
   napi_threadsafe_function on_disconnect_threadsafe_function_ = nullptr;
   napi_threadsafe_function on_event_threadsafe_function_ = nullptr;
   napi_threadsafe_function on_node_input_threadsafe_function_ = nullptr;
+  napi_threadsafe_function on_invoke_node_method_threadsafe_function_ = nullptr;
   napi_env env_ = nullptr;
   napi_ref wrapper_ = nullptr;
 };

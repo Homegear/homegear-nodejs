@@ -12,6 +12,7 @@ Homegear::Homegear(const std::string &socket_path) : env_(nullptr), wrapper_(nul
   ipc_client_->SetOnDisconnect(std::bind(&Homegear::OnDisconnect, this));
   ipc_client_->SetBroadcastEvent(std::bind(&Homegear::OnEvent, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
   ipc_client_->SetNodeInput(std::bind(&Homegear::OnNodeInput, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
+  ipc_client_->SetInvokeNodeMethod(std::bind(&Homegear::OnInvokeNodeMethod, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4));
   ipc_client_->start();
 }
 
@@ -93,8 +94,8 @@ napi_value Homegear::New(napi_env env, napi_callback_info info) {
 
   if (is_constructor) {
     // Invoked as constructor: `new Homegear(...)`
-    size_t argc = 5;
-    napi_value args[5];
+    size_t argc = 6;
+    napi_value args[6];
     napi_value jsthis;
     status = napi_get_cb_info(env, info, &argc, args, &jsthis, nullptr);
     assert(status == napi_ok);
@@ -182,16 +183,31 @@ napi_value Homegear::New(napi_env env, napi_callback_info info) {
       }
     }
 
+    { //OnInvokeNodeMethod
+      napi_value on_invoke_node_method_callback_js = args[5];
+      status = napi_typeof(env, on_invoke_node_method_callback_js, &valuetype);
+      assert(status == napi_ok);
+      if (valuetype == napi_function) {
+        napi_value resource_name;
+        status = napi_create_string_utf8(env, "Thread-safe call from OnInvokeNodeMethod()", NAPI_AUTO_LENGTH, &resource_name);
+        assert(status == napi_ok);
+        status = napi_create_threadsafe_function(env, on_invoke_node_method_callback_js, nullptr, resource_name, 0, 1, nullptr, nullptr, obj, OnInvokeNodeMethodJs, &obj->on_invoke_node_method_threadsafe_function_);
+        assert(status == napi_ok);
+        status = napi_unref_threadsafe_function(env, obj->on_invoke_node_method_threadsafe_function_); //Allow destruction of process even though the reference counter is not 0
+        assert(status == napi_ok);
+      }
+    }
+
     return jsthis;
   } else {
     // Invoked as plain function `Homegear(...)`, turn into construct call.
-    size_t argc_ = 5;
+    size_t argc_ = 6;
     napi_value args[argc_];
     status = napi_get_cb_info(env, info, &argc_, args, nullptr, nullptr);
     assert(status == napi_ok);
 
-    const size_t argc = 5;
-    napi_value argv[argc] = {args[0], args[1], args[2], args[3], args[4]};
+    const size_t argc = 6;
+    napi_value argv[argc] = {args[0], args[1], args[2], args[3], args[4], args[5]};
 
     napi_value instance;
     status = napi_new_instance(env, Constructor(env), argc, argv, &instance);
@@ -353,6 +369,59 @@ void Homegear::OnNodeInput(const std::string &node_id, const Ipc::PVariable &nod
   assert(status == napi_ok);
   status = napi_release_threadsafe_function(on_node_input_threadsafe_function_, napi_tsfn_release);
   assert(status == napi_ok);
+}
+
+void Homegear::OnInvokeNodeMethodJs(napi_env env, napi_value callback, void *context, void *data) {
+  // env and callback may both be NULL if Node.js is in its cleanup phase, and
+  // items are left over from earlier thread-safe calls from the worker thread.
+  // When env is NULL, we simply skip over the call into Javascript and free the
+  // items.
+  if (env && callback && context) {
+    // Retrieve the JavaScript `undefined` value so we can use it as the `this`
+    // value of the JavaScript function call.
+    napi_value undefined;
+    auto status = napi_get_undefined(env, &undefined);
+    assert(status == napi_ok);
+
+    size_t argc = 3;
+    napi_value args[3];
+
+    auto *invoke_node_method_struct = (OnInvokeNodeMethodStruct *)data;
+    status = napi_create_string_utf8(env, invoke_node_method_struct->node_id.c_str(), NAPI_AUTO_LENGTH, &args[0]);
+    assert(status == napi_ok);
+    status = napi_create_string_utf8(env, invoke_node_method_struct->method_name.c_str(), NAPI_AUTO_LENGTH, &args[1]);
+    assert(status == napi_ok);
+    args[2] = NapiVariableConverter::getNapiVariable(env, invoke_node_method_struct->parameters);
+    assert(status == napi_ok);
+
+    napi_value return_val;
+    status = napi_call_function(env, undefined, callback, argc, args, &return_val);
+    assert(status == napi_ok);
+
+    auto result = NapiVariableConverter::getVariable(env, return_val);
+
+    auto obj = static_cast<Homegear *>(context);
+    obj->ipc_client_->InvokeResult(invoke_node_method_struct->thread_id, result);
+  }
+
+  delete (OnInvokeNodeMethodStruct *)data;
+}
+
+bool Homegear::OnInvokeNodeMethod(pthread_t thread_id, const std::string &node_id, const std::string &method_name, const Ipc::PVariable &parameters) {
+  if (!on_invoke_node_method_threadsafe_function_) return false;
+  auto status = napi_acquire_threadsafe_function(on_invoke_node_method_threadsafe_function_);
+  assert(status == napi_ok);
+  auto *data = new OnInvokeNodeMethodStruct;
+  data->thread_id = thread_id;
+  data->node_id = node_id;
+  data->method_name = method_name;
+  data->parameters = parameters;
+  status = napi_call_threadsafe_function(on_invoke_node_method_threadsafe_function_, data, napi_tsfn_nonblocking);
+  assert(status == napi_ok);
+  status = napi_release_threadsafe_function(on_invoke_node_method_threadsafe_function_, napi_tsfn_release);
+  assert(status == napi_ok);
+
+  return true;
 }
 
 napi_value Homegear::Invoke(napi_env env, napi_callback_info info) {

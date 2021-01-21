@@ -103,6 +103,7 @@ Ipc::PVariable NapiVariableConverter::getVariable(napi_env env, napi_value value
         assert(status == napi_ok);
         ipc_struct->structValue->emplace(getVariable(env, property_name)->stringValue, getVariable(env, element_value));
       }
+      if (ipc_struct->structValue->find("faultCode") != ipc_struct->structValue->end()) ipc_struct->errorStruct = true;
       return ipc_struct;
     }
   } else if (valuetype == napi_function) {
